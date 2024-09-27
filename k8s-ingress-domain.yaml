@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ingress-dnspod-solver
+  namespace: cert-manager
+  labels:
+    app: ingress-dnspod-solver
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ingress-dnspod-solver
+rules:
+  - apiGroups: [ "networking.k8s.io" ]
+    resources: [ "ingresses" ]
+    verbs: [ "get", "list", "watch" ]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ingress-dnspod-solver
+  labels:
+    app: ingress-dnspod-solver
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ingress-dnspod-solver
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: ingress-dnspod-solver
+    namespace: cert-manager
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ingress-dnspod-solver
+  namespace: cert-manager
+type: Opaque
+stringData:
+  TENCENT_SECRET_KEY: "xiWI********************p7I"  # 腾讯云 SecretKey
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-dnspod-solver
+  namespace: cert-manager
+data:
+  DOMAIN: "example.com"   # 域名
+  POLICY: "retain"        # 解析记录的生效策略，可选值为 ["retain", "update"]
+  TENCENT_SECRET_ID: "AKI********************rHWgi"  # 腾讯云 SecretId
+  RECORD_VALUE: "172.16.0.90"  # 解析记录的值
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingress-dnspod-solver
+  namespace: cert-manager
+  labels:
+    app: ingress-dnspod-solver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingress-dnspod-solver
+  template:
+    metadata:
+      labels:
+        app: ingress-dnspod-solver
+    spec:
+      serviceAccountName: ingress-dnspod-solver
+      containers:
+        - name: ingress-dnspod-solver
+          image: ingress-dnspod-solver:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: ingress-dnspod-solver
+                  key: DOMAIN
+            - name: POLICY
+              valueFrom:
+                configMapKeyRef:
+                  name: ingress-dnspod-solver
+                  key: POLICY
+            - name: TENCENT_SECRET_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: ingress-dnspod-solver
+                  key: TENCENT_SECRET_ID
+            - name: TENCENT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ingress-dnspod-solver
+                  key: TENCENT_SECRET_KEY
+            - name: RECORD_VALUE
+              valueFrom:
+                configMapKeyRef:
+                  name: ingress-dnspod-solver
+                  key: RECORD_VALUE
+
+
+
