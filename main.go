@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	"os"
+	"strings"
 )
 
 var (
@@ -96,6 +97,7 @@ func getRecordDict() map[string]uint64 {
 		response, err = dnsPodClient.DescribeRecordList(request)
 		if err != nil {
 			logger.Error(err.Error())
+			return nil
 		}
 		for i := 0; i < len(response.Response.RecordList); i++ {
 			recordDict[*response.Response.RecordList[i].Name] = *response.Response.RecordList[i].RecordId
@@ -153,15 +155,16 @@ func addHandler(obj interface{}) {
 	addIngress := obj.(*networkingv1.Ingress)
 	for i := 0; i < len(addIngress.Spec.Rules); i++ {
 		customDomain := addIngress.Spec.Rules[i].Host
-		// customDomain 判断是否以 domain 结尾
-		if customDomain[len(customDomain)-len(domain):] != domain {
+		subDomain, hasSuffix := strings.CutSuffix(customDomain, "."+domain)
+		if !hasSuffix {
 			continue
 		}
-		subDomain := customDomain[:len(customDomain)-len(domain)-1]
 		if _, ok := recordDict[subDomain]; !ok {
+			logger.Info("Create Record: ", zap.String("SubDomain", subDomain))
 			createRecord(subDomain)
 		} else {
 			if policy == "update" {
+				logger.Info("Update Record: ", zap.String("SubDomain", subDomain))
 				updateRecord(recordDict[subDomain], subDomain)
 			}
 		}
@@ -174,14 +177,15 @@ func updateHandler(oldObj, newObj interface{}) {
 	newIngress := newObj.(*networkingv1.Ingress)
 	for i := 0; i < len(newIngress.Spec.Rules); i++ {
 		customDomain := newIngress.Spec.Rules[i].Host
-		// customDomain 判断是否以 domain 结尾
-		if customDomain[len(customDomain)-len(domain):] != domain {
+		subDomain, hasSuffix := strings.CutSuffix(customDomain, "."+domain)
+		if !hasSuffix {
 			continue
 		}
-		subDomain := customDomain[:len(customDomain)-len(domain)-1]
 		if _, ok := recordDict[subDomain]; !ok {
+			logger.Info("Create Record: ", zap.String("SubDomain", subDomain))
 			createRecord(subDomain)
 		} else {
+			logger.Info("Update Record: ", zap.String("SubDomain", subDomain))
 			updateRecord(recordDict[subDomain], subDomain)
 		}
 	}
@@ -193,12 +197,12 @@ func deleteHandler(obj interface{}) {
 	deleteIngress := obj.(*networkingv1.Ingress)
 	for i := 0; i < len(deleteIngress.Spec.Rules); i++ {
 		customDomain := deleteIngress.Spec.Rules[i].Host
-		// customDomain 判断是否以 domain 结尾
-		if customDomain[len(customDomain)-len(domain):] != domain {
+		subDomain, hasSuffix := strings.CutSuffix(customDomain, "."+domain)
+		if !hasSuffix {
 			continue
 		}
-		subDomain := customDomain[:len(customDomain)-len(domain)-1]
 		if _, ok := recordDict[subDomain]; ok {
+			logger.Info("Delete Record: ", zap.String("SubDomain", subDomain))
 			deleteRecord(recordDict[subDomain])
 		}
 	}
